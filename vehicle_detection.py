@@ -30,6 +30,7 @@ from useful_functions import *
 from sklearn.model_selection import train_test_split
 from scipy.ndimage.measurements import label
 from collections import deque
+from sklearn import svm, grid_search, datasets
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -42,16 +43,20 @@ flags.DEFINE_bool('video', False, "Input is video")
 flags.DEFINE_string('image_path', '', "The input image file path")
 flags.DEFINE_string('video_path', '', "The input video file path")
 flags.DEFINE_bool('debug', False, "Generate perspective transform matrix")
+flags.DEFINE_float('start', 0.0, "The start of the video")
+flags.DEFINE_float('end', 0.0, "The end of the video")
 
 # Keeps records of data of left or right lane line mark for each frame
 class Vehicle():
     def __init__(self):
         # the number of last iterations to keep
         self.n = 5
-        # box list of the last n detection
+        # box list of the last n detections
         self.recent_box_list = deque()
         # sum all the box list
         self.sum_recent_boxes = []
+        # heat map of the last n detections
+        self.recent_heat_map = deque()
     
     # Keeps the box list for last n iterations
     def keep_last_iterations(self, box_list):
@@ -67,9 +72,16 @@ class Vehicle():
             
     # Conconate all the rescent box list
     def sum_all_boxes(self):
-        print(len(self.recent_box_list))
         if len(self.recent_box_list)>0:
             self.sum_recent_boxes = np.concatenate(self.recent_box_list)
+    
+    # Keeps the heat map for last n iterations
+    def keep_heat_map(self, heat_map):
+        if len(self.recent_heat_map)<self.n:
+            self.recent_heat_map.appendleft(heat_map)
+        else:
+            self.recent_heat_map.pop()
+            self.recent_heat_map.appendleft(heat_map)
 vehicle_detect = Vehicle()        
 
 ### TODO: Tweak these parameters and see how the results change.
@@ -185,8 +197,13 @@ def train_classifier(data_path):
     print('Using:',orient,'orientations',pix_per_cell,
         'pixels per cell and', cell_per_block,'cells per block')
     print('Feature vector length:', len(X_train[0]))
+    
+    #parameters = {'kernel':('linear', 'rbf'), 'C':[1, 10]} 
+    #parameters = {'kernel':['linear'], 'C':[1, 10, 100]} 
+    #svr = svm.SVC()    
     # Use a linear SVC 
     svc = LinearSVC()
+    #svc = grid_search.GridSearchCV(svr, parameters)
     # Check the training time for the SVC
     t=time.time()
     svc.fit(X_train, y_train)
@@ -196,7 +213,7 @@ def train_classifier(data_path):
     print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
     # Check the prediction time for a single sample
     t=time.time()
-    
+    #print(svc.best_params_)
     return svc, X_scaler
 
 # The pipeline to process each picture or frame
@@ -206,7 +223,7 @@ def pipeline(image):
     pos_box_list = []
     ystart = y_start_stop[0]
     ystop = y_start_stop[1]
-    scale = 2.0
+    scale = 1.8
     
     if FLAGS.debug == True:
         positive_boxes, out_image = find_cars(image, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins,
@@ -249,23 +266,64 @@ def pipeline(image):
         
         # Apply threshold to help remove false positives
         if FLAGS.image is True:
-            heat = apply_threshold(heat, 3)
+            heat = apply_threshold(heat, 0)
         if FLAGS.video is True:
-            heat = apply_threshold(heat, 20)
+            heat = apply_threshold(heat, 3)
         # Visualize the heatmap when displaying    
         heatmap = np.clip(heat, 0, 255)
     
-        if FLAGS.debug == True:
-            output_image = np.dstack((heatmap, heatmap, heatmap)).astype(np.uint8)
-            cv2.imwrite('./'+filename+'_heatmap.jpg', cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB))
+        #if FLAGS.debug == True:
+        #    output_image = np.dstack((heatmap, heatmap, heatmap)).astype(np.uint8)
+        #    cv2.imwrite('./'+filename+'_heatmap.jpg', cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB))
     
         # Find final boxes from heatmap using label function
         labels = label(heatmap)
         
         output_image = draw_labeled_bboxes(image, labels)
+        
+        if FLAGS.debug == True:
+            fig = plt.figure()
+            plt.subplot(121)
+            plt.imshow(output_image)
+            plt.title('Car Positions')
+            plt.subplot(122)
+            plt.imshow(heatmap, cmap='hot')
+            plt.title('Heat Map')
+            fig.tight_layout()
+            if FLAGS.image is True:
+                plt.savefig('./'+filename+'_heatmap.jpg', transparent=False, bbox_inches=None, pad_inches=0.1, frameon=None)
+                plt.close()
+            if FLAGS.video is True:
+                vehicle_detect.keep_heat_map((output_image, heatmap))
+                plt.close()
+                t = time.time()
+                fig2 = plt.figure(figsize=(6.4,14.8))
+                for n in range(len(vehicle_detect.recent_heat_map)):
+                    plt.subplot(5,2,n*2+1)
+                    plt.imshow(vehicle_detect.recent_heat_map[-n-1][0])
+                    plt.title('Car Positions')
+                    plt.subplot(5,2,n*2+2)
+                    plt.imshow(vehicle_detect.recent_heat_map[-n-1][1], cmap='hot')
+                    plt.title('Heat Map')
+                #plt.subplot(6,2,1)
+                #plt.imshow(vehicle_detect.recent_heat_map[0][0])
+                #plt.subplot(6,2,2)
+                #plt.imshow(vehicle_detect.recent_heat_map[0][1], cmap='hot')
+                fig2.tight_layout()
+                plt.savefig('./'+filename+str(t)+'_heatmap.jpg', transparent=False, bbox_inches=None, pad_inches=0.1, frameon=None)
+                plt.close()
     else:
         output_image = image
     
+    if FLAGS.debug == True:
+        if FLAGS.video is True:
+            t = time.time()
+            fig = plt.figure()
+            plt.imshow(labels[0], cmap='hot')
+            plt.savefig('./'+filename+str(t)+'_labels.jpg', transparent=False, bbox_inches=None, pad_inches=0.1, frameon=None)
+            plt.close()
+            cv2.imwrite('./'+filename+str(t)+'_output_bbox.jpg', cv2.cvtColor(output_image, cv2.COLOR_BGR2RGB))
+        
     return output_image
 
 if FLAGS.training is True:
@@ -329,7 +387,12 @@ def main(__):
             if FLAGS.video_path is not "":
                 if os.path.isfile(FLAGS.video_path) is True:
                     filename = FLAGS.video_path.split('/')[-1].split('.')[0]
-                    clip1 = VideoFileClip(FLAGS.video_path)
+                    if FLAGS.start == FLAGS.end:
+                        clip1 = VideoFileClip(FLAGS.video_path)
+                    elif FLAGS.start < FLAGS.end:
+                        clip1 = VideoFileClip(FLAGS.video_path).subclip(FLAGS.start,FLAGS.end)
+                    else:
+                        print("Start time is less than end time!!!")
                     drawing_lane_clip = clip1.fl_image(pipeline)
                     drawing_lane_clip.write_videofile('./'+filename+'_vehicle_detecting.mp4', audio=False)
                 else:
