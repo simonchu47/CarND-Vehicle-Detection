@@ -34,7 +34,7 @@ You're reading it!
 
 ####1. Explain how (and identify where in your code) you extracted HOG features from the training images.
 
-The code for this step is contained in lines # through # of the file called `useful_functions.py`.  
+The code for this step is contained in lines 33 through 50 of the file called `useful_functions.py`. The `skimage.feature.hog` function is used to extract HOG features after the image is converted to the desired color space. 
 
 I started by reading in all the `vehicle` and `non-vehicle` images.  Here is an example of one of each of the `vehicle` and `non-vehicle` classes:
 
@@ -55,11 +55,10 @@ In addition, all the test accuracy are between 0.978 and 0.993, and I choosed `o
 
 ####3. Describe how (and identify where in your code) you trained a classifier using your selected HOG features (and color features if you used them).
 
-I trained a linear SVM using the extracted features of the `vehicle` and `non-vehicle` images. The features include YUV spatial, color histogram and HOG of each channel features. I have tried to convert these images into other color spaces and extracted the features, and I found that YUV color space is the one with high test accuracy which is 0.9935 but not too much training time which is 26.23s. Those features are normalized wtih `sklearn.preprocessing.StandardScaler()` and randomly splited into training and test sets, which are 80% and 20% of all repectively, with `sklearn.model_selection.train_test_split()`
+I trained a linear SVM using the extracted features of the `vehicle` and `non-vehicle` images. The features include YUV spatial, color histogram and HOG of each channel features. I have tried to convert these images into other color spaces and extracted the features, and I found that YUV color space is the one with high test accuracy which is 0.9935 but not too much training time which is 26.23s. Those features are normalized wtih `sklearn.preprocessing.StandardScaler()` and randomly splited into training and test sets, which are 80% and 20% of all repectively, with `sklearn.model_selection.train_test_split()`. Those steps are in lines 122 through 134 of the file called `vehicle_detection.py`.
 
 I also used `sklearn.grid_search.GridSearchCV()` function to tune the `C` parameter of the linear SVM. The best `C` parameter is 1.0.
-
-The steps mentioned above are in lines # through # of the file called `vehicle_detection.py`
+The steps mentioned are in lines 192 through 209 of the file called `vehicle_detection.py`
 
 ###Sliding Window Search
 
@@ -67,7 +66,7 @@ The steps mentioned above are in lines # through # of the file called `vehicle_d
 
 I decided to search bottom halve of the read-in image with two scales of sliding window:
 
-The large scale window is 128x128 pixels scanning from y position 400 to 656. The window is searching for vehicles that are closer to us. And the middle scale window is 64x64 pixels scanning from y position 400 to 500, and it is searching for vehicles that are more far away.
+The large scale window is 128x128 pixels scanning from y position 400 to 656. The window is searching for vehicles that are closer to us. And the middle scale window is 64x64 pixels scanning from y position 400 to 500, and it is searching for vehicles that are more far away. This step is in lines 218 through 251 of the file called `vehicle_detection.py`.
 
 And each step to move on for the scanning window is 2 cells, which means 16 pixels if 8 pixels per cell is set. Therefore the overlap of the windows is 75%. Below is an example of all the scanning windows for an image. 
 ![alt text][image8]

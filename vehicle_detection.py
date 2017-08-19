@@ -10,7 +10,7 @@ import os, fnmatch
 import pickle
 import cv2
 import numpy as np
-import glob
+#import glob
 import time
 import matplotlib
 matplotlib.use('agg')
@@ -110,7 +110,6 @@ def find(pattern, path):
 def train_classifier(data_path):
     #images = glob.glob(data_path+'/'+'*.png')
     images = find('*.png', data_path)
-    #print(images[0])
     cars = []
     notcars = []
     for image in images:
@@ -118,19 +117,15 @@ def train_classifier(data_path):
             notcars.append(image)
         else:
             cars.append(image)
-    #print(len(notcars))
-    #print(len(cars))
-    #image = mpimg.imread(notcars[0])
-    #image = cv2.imread(notcars[0])
-    #print(np.amax(image))
-    #print(np.amin(image))
     
+    # Extract features for cars
     car_features = extract_features(cars, color_space=color_space, 
                         spatial_size=spatial_size, hist_bins=hist_bins, 
                         orient=orient, pix_per_cell=pix_per_cell, 
                         cell_per_block=cell_per_block, 
                         hog_channel=hog_channel, spatial_feat=spatial_feat, 
                         hist_feat=hist_feat, hog_feat=hog_feat)
+    # Extract features for NOT cars
     notcar_features = extract_features(notcars, color_space=color_space, 
                         spatial_size=spatial_size, hist_bins=hist_bins, 
                         orient=orient, pix_per_cell=pix_per_cell, 
@@ -139,13 +134,12 @@ def train_classifier(data_path):
                         hist_feat=hist_feat, hog_feat=hog_feat)
     
     if FLAGS.debug == True:
+        # Randomly choose a car picture for test and showing results
         car_test_img_file = random.choice(cars)
         if car_test_img_file.split('.')[-1] == "png":
-            #print("This is a png file")
             readin = cv2.imread(car_test_img_file)
             image = cv2.cvtColor(readin, cv2.COLOR_BGR2RGB)
         else:
-            #print("This is NOT a png file")
             image = mpimg.imread(car_test_img_file)
         
         file_name = car_test_img_file.split('/')[-1].split('.')[0]
@@ -158,13 +152,12 @@ def train_classifier(data_path):
                             hist_feat=hist_feat, hog_feat=hog_feat,
                             debug=True, name=file_name)
         
+        # Randomly choose a non-car picture for test and showing results
         notcar_test_img_file = random.choice(notcars)
         if notcar_test_img_file.split('.')[-1] == "png":
-            #print("This is a png file")
             readin = cv2.imread(notcar_test_img_file)
             image = cv2.cvtColor(readin, cv2.COLOR_BGR2RGB)
         else:
-            #print("This is NOT a png file")
             image = mpimg.imread(notcar_test_img_file)
         
         file_name = notcar_test_img_file.split('/')[-1].split('.')[0]
@@ -177,8 +170,6 @@ def train_classifier(data_path):
                             hist_feat=hist_feat, hog_feat=hog_feat,
                             debug=True, name=file_name)
     
-    #print(car_features)
-    #print(notcar_features)
     X = np.vstack((car_features, notcar_features)).astype(np.float64)                        
     # Fit a per-column scaler
     X_scaler = StandardScaler().fit(X)
@@ -198,6 +189,7 @@ def train_classifier(data_path):
         'pixels per cell and', cell_per_block,'cells per block')
     print('Feature vector length:', len(X_train[0]))
     
+    # The following is parameter setting for optimizer
     #parameters = {'kernel':('linear', 'rbf'), 'C':[1, 10]} 
     #parameters = {'kernel':['linear'], 'C':[1, 10, 100]} 
     #svr = svm.SVC()    
@@ -213,6 +205,7 @@ def train_classifier(data_path):
     print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
     # Check the prediction time for a single sample
     t=time.time()
+    # Show the best parameter of the optimization
     #print(svc.best_params_)
     return svc, X_scaler
 
@@ -221,6 +214,8 @@ def pipeline(image):
     
     filename = FLAGS.image_path.split('/')[-1].split('.')[0]
     pos_box_list = []
+    
+    # The following is for large scanning window searching
     ystart = y_start_stop[0]
     ystop = y_start_stop[1]
     scale = 1.8
@@ -236,6 +231,7 @@ def pipeline(image):
     if len(positive_boxes)>0:
         pos_box_list.append(positive_boxes)
 
+    # The following is for middle scanning window searching
     ystart = 400
     ystop = 500
     scale = 1.0
@@ -254,7 +250,9 @@ def pipeline(image):
     if len(pos_box_list) > 0:
         pos_box_list = np.concatenate(pos_box_list)
     
+    # Keep record the box list for this iteration
     vehicle_detect.keep_last_iterations(pos_box_list)
+    # Accumulate all the box lists for the last 5 iterations
     vehicle_detect.sum_all_boxes()
     recent_boxes = vehicle_detect.sum_recent_boxes
     
@@ -297,6 +295,7 @@ def pipeline(image):
                 vehicle_detect.keep_heat_map((output_image, heatmap))
                 plt.close()
                 t = time.time()
+                # Show all the car positions and heat map for the last 5 iterations
                 fig2 = plt.figure(figsize=(6.4,14.8))
                 for n in range(len(vehicle_detect.recent_heat_map)):
                     plt.subplot(5,2,n*2+1)
@@ -305,10 +304,7 @@ def pipeline(image):
                     plt.subplot(5,2,n*2+2)
                     plt.imshow(vehicle_detect.recent_heat_map[-n-1][1], cmap='hot')
                     plt.title('Heat Map')
-                #plt.subplot(6,2,1)
-                #plt.imshow(vehicle_detect.recent_heat_map[0][0])
-                #plt.subplot(6,2,2)
-                #plt.imshow(vehicle_detect.recent_heat_map[0][1], cmap='hot')
+                
                 fig2.tight_layout()
                 plt.savefig('./'+filename+str(t)+'_heatmap.jpg', transparent=False, bbox_inches=None, pad_inches=0.1, frameon=None)
                 plt.close()
@@ -343,11 +339,12 @@ if FLAGS.training is True:
         svc_pickle["hist_feat"] = hist_feat
         svc_pickle["hog_feat"] = hog_feat          
         svc_pickle["X_scaler"] = X_scaler
+        # Save the classifier and the related parameters into a pickle
         pickle.dump( svc_pickle, open( "./trained_svc_pickle.p", "wb" ) )
     else:
         print("Please add the training_path flag...")
 else:
-    # Read in the trained classifier
+    # Read in the trained classifier and the related parameters
     trained_svc_pickle = "./trained_svc_pickle.p"
     if os.path.isfile(trained_svc_pickle) is True:
         print("Find the pickle.........")
@@ -368,8 +365,8 @@ else:
         print("Sorry!, no trained svc pickle...")
         
 def main(__):
-    # Do the calibration and perspective transformation matrix finding first,
-    # then do the lane finding for one picture or video   
+    # Do the classifier training first,
+    # then do the vehicle detecting for one picture or video   
     if FLAGS.training == False:        
         if FLAGS.image is True:
             if FLAGS.image_path is not "":
